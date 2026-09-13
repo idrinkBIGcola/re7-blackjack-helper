@@ -1,0 +1,476 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>RE7 21点记牌器</title>
+<style>
+/* ══ 调色板：所有颜色只在这里定义一次 ══ */
+:root{
+  --bg:#0e1014;
+  --surface:#171b22;
+  --surface-2:#1e232c;
+  --line:rgb(255 255 255 / .07);
+  --line-2:rgb(255 255 255 / .15);
+
+  --text:#e9edf4;
+  --dim:#b3bcca;
+  --faint:#939dae;
+
+  --me-rgb:74 163 255;
+  --opp-rgb:255 144 64;
+  --safe-rgb:46 204 143;
+  --exact-rgb:255 201 77;
+  --bust-rgb:255 82 87;
+
+  --me:rgb(var(--me-rgb));
+  --opp:rgb(var(--opp-rgb));
+  --safe:rgb(var(--safe-rgb));
+  --exact:rgb(var(--exact-rgb));
+  --bust:rgb(var(--bust-rgb));
+  --me-ink:#dcecff;      --me-ink-dim:#a6c8f0;
+  --opp-ink:#ffeedd;     --opp-ink-dim:#f3c193;
+  --gloss:inset 0 1px 0 rgb(255 255 255 / .22);
+
+  --ease:cubic-bezier(.2,.75,.3,1);
+  --r:13px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:radial-gradient(120% 70% at 50% -10%,#1a2029 0%,var(--bg) 55%) var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+  max-width:700px;margin:0 auto;
+  padding:12px 12px calc(16px + env(safe-area-inset-bottom));
+  user-select:none;-webkit-tap-highlight-color:transparent;
+}
+.wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));
+  gap:10px;align-items:start}
+.head,.actions{grid-column:1/-1}
+h1{font-size:16px;font-weight:650;margin:0;letter-spacing:.3px}
+h1 em{font-style:normal;color:var(--exact)}
+.head{display:flex;align-items:center;gap:10px;padding:0 2px}
+.badge{margin-left:auto;font-size:11.5px;color:var(--dim);background:var(--surface);
+  border:1px solid var(--line);padding:3px 9px;border-radius:999px;font-variant-numeric:tabular-nums}
+.panel{background:linear-gradient(180deg,#1a1f27,#151920);border:1px solid var(--line);
+  border-radius:var(--r);padding:10px;
+  box-shadow:inset 0 1px 0 rgb(255 255 255 / .03),0 8px 22px -16px #000}
+.sec-head{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+.sec-title{font-size:12.5px;font-weight:650;color:var(--text);letter-spacing:.4px;flex:0 0 auto}
+.sec-note{margin-left:auto;font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums;text-align:right}
+
+/* ── 双方点数 ───────────────────────────── */
+.score{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.side{position:relative;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:11px;padding:8px 9px 8px 12px;overflow:hidden}
+.side::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c)}
+.side.me{--c:var(--me)} .side.opp{--c:var(--opp)}
+.side-head{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--dim)}
+.side-head i{width:6px;height:6px;border-radius:50%;background:var(--c);box-shadow:0 0 8px var(--c)}
+.side-total{font-size:27px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;
+  display:flex;align-items:baseline;gap:3px;margin:1px 0;color:var(--text)}
+.side-total u{text-decoration:none;font-size:11px;font-weight:400;color:var(--faint)}
+.side-cards{font-size:11.5px;color:var(--dim);min-height:16px;font-variant-numeric:tabular-nums;word-break:break-all}
+.chip{display:inline-block;margin-top:5px;font-size:10.5px;font-weight:650;padding:2px 7px;border-radius:999px;
+  color:#fff;background:rgb(var(--bust-rgb)/.18);border:1px solid rgb(var(--bust-rgb)/.5);
+  animation:chipIn .26s var(--ease)}
+
+/* ── 标记模式（仅触屏显示） ─────────────── */
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.modes[hidden]{display:none}
+.mode{appearance:none;border:1px solid var(--line);background:rgb(255 255 255 / .02);color:var(--dim);
+  font:inherit;font-size:12.5px;padding:11px 0;border-radius:9px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  transition:background .15s,color .15s,border-color .15s,transform .08s}
+.mode:active{transform:scale(.97)}
+.mode i{width:7px;height:7px;border-radius:2px;background:currentColor;opacity:.6;transition:opacity .15s}
+.mode[aria-pressed="true"]{color:var(--text);border-color:var(--line-2);background:rgb(255 255 255 / .07)}
+.mode[aria-pressed="true"] i{opacity:1}
+.mode[data-mode="my"][aria-pressed="true"]{color:var(--me-ink);background:rgb(var(--me-rgb)/.16);border-color:rgb(var(--me-rgb)/.5)}
+.mode[data-mode="enemy"][aria-pressed="true"]{color:var(--opp-ink);background:rgb(var(--opp-rgb)/.15);border-color:rgb(var(--opp-rgb)/.5)}
+
+
+/* ── 牌面：4 / 4 / 3 左对齐 ─────────────── */
+.cards{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-start}
+.card{position:relative;flex:0 0 calc((100% - 18px)/4);height:50px;border-radius:11px;
+  border:1px dashed var(--line-2);background:rgb(255 255 255 / .025);color:var(--dim);
+  font:inherit;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .16s,border-color .16s,color .16s,transform .08s}
+.card:active{transform:scale(.94)}
+.card.pop{animation:pop .26s var(--ease)}
+.card .tag{position:absolute;right:5px;top:4px;font-size:9px;font-weight:700;opacity:0;transition:opacity .16s}
+.card.mine{border-style:solid;border-color:rgb(var(--me-rgb)/.55);color:var(--me-ink);
+  background:linear-gradient(180deg,rgb(var(--me-rgb)/.30),rgb(var(--me-rgb)/.11));
+  box-shadow:inset 0 0 0 1px rgb(var(--me-rgb)/.16),0 6px 16px -10px rgb(var(--me-rgb)/.95)}
+.card.mine .tag{opacity:1;color:var(--me-ink-dim)}
+.card.enemy{border-style:solid;border-color:rgb(var(--opp-rgb)/.55);color:var(--opp-ink);
+  background:linear-gradient(180deg,rgb(var(--opp-rgb)/.30),rgb(var(--opp-rgb)/.11));
+  box-shadow:inset 0 0 0 1px rgb(var(--opp-rgb)/.16),0 6px 16px -10px rgb(var(--opp-rgb)/.95)}
+.card.enemy .tag{opacity:1;color:var(--opp-ink-dim)}
+.card:focus-visible{outline:2px solid var(--exact);outline-offset:2px}
+
+/* ── 我方下一抽概率 ─────────────────────── */
+.bar{display:flex;height:13px;border-radius:999px;overflow:hidden;background:var(--surface-2);
+  box-shadow:inset 0 1px 3px rgb(0 0 0 / .55)}
+.bar>div{background:var(--c);box-shadow:var(--gloss);transition:width .34s var(--ease);min-width:0}
+.seg-safe{--c:var(--safe)} .seg-bust{--c:var(--bust)}
+.seg-exact{--c:var(--exact);
+  background-image:linear-gradient(100deg,transparent 32%,rgb(255 255 255/.5) 50%,transparent 68%);
+  background-size:220% 100%;background-repeat:no-repeat;animation:sweep 2.8s linear infinite}
+.legend{display:flex;gap:5px;margin-top:8px}
+.lg{flex:1;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:5px 7px}
+.lg s{width:7px;height:7px;border-radius:2px;flex:0 0 auto;background:var(--c)}
+.lg b{margin-left:auto;color:var(--text);font-weight:650;font-variant-numeric:tabular-nums}
+
+/* ── 对方爆牌概率：固定 10 格刻度 + 从左到右填充 ─ */
+.risk{display:flex;align-items:center;gap:9px;margin:0 0 9px;padding:0 0 9px;
+  border-bottom:1px dashed var(--line);font-size:12px;color:var(--dim)}
+.gauge{position:relative;flex:1;height:9px;border-radius:999px;background:var(--surface-2);
+  box-shadow:inset 0 1px 2px rgb(0 0 0 / .5);overflow:hidden}
+.gauge .fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;
+  background:var(--bust);box-shadow:var(--gloss);transition:width .45s var(--ease)}
+.gauge .ticks{position:absolute;inset:0;display:flex;pointer-events:none}
+.gauge .ticks i{flex:1 1 0}
+.gauge .ticks i:not(:last-child){border-right:1px solid rgb(0 0 0 / .45)}
+.risk b{color:var(--text);font-weight:650;font-variant-numeric:tabular-nums;min-width:44px;text-align:right;
+  transition:color .25s}
+.risk.hot b{color:var(--bust)}
+.risk.hot .fill{box-shadow:var(--gloss),0 0 10px rgb(var(--bust-rgb)/.55)}
+
+/* ── 对方手牌可能大小（按牌值复用节点，不整块重绘） ─ */
+.ggrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 6px}
+.gcell{display:flex;align-items:center;gap:5px;font-size:12.5px;font-variant-numeric:tabular-nums;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--dim);
+  transition:background .2s,border-color .2s}
+.gcell s{width:3px;height:11px;border-radius:2px;background:var(--c);flex:0 0 auto;transition:background .2s}
+.gcell .gv{color:var(--text);font-weight:600}
+.gcell .gt{margin-left:auto;font-weight:650;color:var(--text);transition:color .2s}
+.gcell .gb{font-size:10px;font-weight:700;color:#fff;background:rgb(var(--bust-rgb)/.24);
+  border-radius:4px;padding:1px 4px}
+.gcell.bust{--c:var(--bust);border-color:rgb(var(--bust-rgb)/.4);background:rgb(var(--bust-rgb)/.09)}
+.gcell.bust .gt{color:var(--bust)}
+.gcell.exact{--c:var(--exact);border-color:rgb(var(--exact-rgb)/.4);background:rgb(var(--exact-rgb)/.08)}
+.gcell.exact .gt{color:var(--exact)}
+.gcell.safe{--c:var(--safe)}
+.empty{color:var(--faint);font-size:12px;padding:4px 2px}
+
+/* ── 操作 ───────────────────────────────── */
+.actions{display:flex;gap:8px}
+.btn{flex:1;padding:11px;border-radius:11px;border:1px solid var(--line-2);background:var(--surface);
+  color:var(--dim);font:inherit;font-size:13px;cursor:pointer;
+  transition:background .15s,color .15s,transform .08s}
+.btn:hover{background:var(--surface-2);color:var(--text)}
+.btn:active{transform:translateY(1px) scale(.995)}
+.btn.undo{flex:0 0 34%}
+.btn[disabled]{opacity:.4;cursor:default;transform:none}
+.btn.reset{color:#ffc9cb;border-color:rgb(var(--bust-rgb)/.35);background:rgb(var(--bust-rgb)/.1)}
+.btn.reset:hover{background:rgb(var(--bust-rgb)/.18);color:#fff}
+
+/* ── 动画 ───────────────────────────────── */
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(1)}45%{transform:scale(1.11)}100%{transform:scale(1)}}
+@keyframes chipIn{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:none}}
+@keyframes sweep{from{background-position:170% 0}to{background-position:-70% 0}}
+.wrap>*{animation:rise .42s var(--ease) both}
+.wrap>*:nth-child(2){animation-delay:.04s}
+.wrap>*:nth-child(3){animation-delay:.09s}
+.wrap>*:nth-child(4){animation-delay:.14s}
+.wrap>*:nth-child(5){animation-delay:.19s}
+.wrap>*:nth-child(6){animation-delay:.23s}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="head">
+    <h1>RE7 <em>21</em>点记牌器</h1>
+    <div class="badge" id="remainBadge">剩余 11 张</div>
+  </div>
+
+  <section class="panel score" id="pScore">
+    <div class="side me">
+      <div class="side-head"><i></i>我方</div>
+      <div class="side-total"><span id="myTotal">0</span><u>点</u></div>
+      <div class="side-cards" id="myCards">—</div>
+      <div id="myChip"></div>
+    </div>
+    <div class="side opp">
+      <div class="side-head"><i></i>对方 · 明牌</div>
+      <div class="side-total"><span id="enemyTotal">0</span><u>点</u></div>
+      <div class="side-cards" id="enemyCards">—</div>
+      <div id="enemyChip"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="pCards">
+    <div class="sec-head"><span class="sec-title">牌面</span><span class="sec-note" id="cardHint">左键=我方 · 右键=对方 · 中键=取消</span></div>
+    <div class="modes" id="modes" role="group" aria-label="标记模式" hidden>
+      <button class="mode" data-mode="my" aria-pressed="true"><i></i>我方</button>
+      <button class="mode" data-mode="enemy" aria-pressed="false"><i></i>对方</button>
+
+    </div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section class="panel" id="pProb">
+    <div class="sec-head"><span class="sec-title">我方下一抽概率</span><span class="sec-note" id="probNote">剩余 11 张</span></div>
+    <div class="bar">
+      <div class="seg-safe" id="safeBar"></div>
+      <div class="seg-exact" id="exactBar"></div>
+      <div class="seg-bust" id="bustBar"></div>
+    </div>
+    <div class="legend">
+      <div class="lg" style="--c:var(--safe)"><s></s>不爆<b id="safeTxt">—</b></div>
+      <div class="lg" style="--c:var(--exact)"><s></s>21点<b id="exactTxt">—</b></div>
+      <div class="lg" style="--c:var(--bust)"><s></s>爆牌<b id="bustTxt">—</b></div>
+    </div>
+  </section>
+
+  <section class="panel" id="pOpp">
+    <div class="sec-head"><span class="sec-title">对方手牌可能大小</span><span class="sec-note" id="oppNote">明牌 0 点 + 暗牌</span></div>
+    <div class="risk" id="riskRow">
+      <span>对方爆牌概率</span>
+      <span class="gauge">
+        <i class="fill" id="oppFill"></i>
+        <span class="ticks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      </span>
+      <b id="oppRiskTxt">—</b>
+    </div>
+    <div id="guessWrap"></div>
+  </section>
+
+  <div class="actions">
+    <button class="btn undo" id="undoBtn" disabled>撤销</button>
+    <button class="btn reset" id="resetBtn">新局重置</button>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+const CARDS=[1,2,3,4,5,6,7,8,9,10,11];
+const KEY='re7-21-state';
+const MAXHIST=200;
+const REDUCE=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let state={};
+let history=[];
+let mode='my';
+let isTouch=false;
+let lastChanged=null;
+
+const sum=a=>a.reduce((x,y)=>x+y,0);
+const pct=(a,b)=>b? (a/b*100) : 0;
+const $=id=>document.getElementById(id);
+const getMy=()=>CARDS.filter(v=>state[v]==='my');
+const getEnemy=()=>CARDS.filter(v=>state[v]==='enemy');
+const getRemain=()=>CARDS.filter(v=>state[v]===null);
+function pushHistory(){ history.push(JSON.stringify(state)); if(history.length>MAXHIST) history.shift(); }
+
+/* ── 数字滚动（合计区那种） ─────────────── */
+function tween(el,val,dec,suffix){
+  suffix=suffix||'';
+  if(REDUCE){ el.textContent=val.toFixed(dec)+suffix; return; }
+  const cur=parseFloat(el.textContent);
+  const from=isFinite(cur)?cur:val;
+  if(Math.abs(from-val)<1e-3){ el.textContent=val.toFixed(dec)+suffix; return; }
+  if(el._raf) cancelAnimationFrame(el._raf);
+  if(el._to) clearTimeout(el._to);
+  const t0=performance.now(), dur=320;
+  const step=t=>{
+    const k=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-k,3);
+    el.textContent=(from+(val-from)*e).toFixed(dec)+suffix;
+    el._raf = k<1 ? requestAnimationFrame(step) : null;
+  };
+  el._raf=requestAnimationFrame(step);
+  /* 兜底：rAF 被降频时也保证最终值落到位 */
+  el._to=setTimeout(()=>{
+    if(el._raf){ cancelAnimationFrame(el._raf); el._raf=null; }
+    el.textContent=val.toFixed(dec)+suffix;
+  }, dur+80);
+}
+function dash(el){ if(el._raf){cancelAnimationFrame(el._raf);el._raf=null;} if(el._to)clearTimeout(el._to); el.textContent='—'; }
+
+/* ── 牌面 ─────────────────────────────── */
+function renderCards(){
+  const area=$('cards');
+  area.innerHTML='';
+  CARDS.forEach(v=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='card'+(state[v]==='my'?' mine':state[v]==='enemy'?' enemy':'')
+                       +(lastChanged===v?' pop':'');
+    b.setAttribute('aria-pressed', state[v]!==null);
+    b.setAttribute('aria-label','牌 '+v+(state[v]==='my'?'（我方）':state[v]==='enemy'?'（对方）':'（剩余）'));
+    b.innerHTML='<span>'+v+'</span><span class="tag">'+(state[v]==='my'?'我':state[v]==='enemy'?'敌':'')+'</span>';
+    b.addEventListener('click',()=>apply(v));
+    b.addEventListener('contextmenu',e=>{e.preventDefault();set(v,'enemy');});
+    b.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault();});
+    b.addEventListener('auxclick',e=>{if(e.button===1){e.preventDefault();set(v,null);}});
+    area.appendChild(b);
+  });
+  lastChanged=null;
+}
+function apply(v){
+  const want = isTouch ? mode : 'my';
+  set(v, state[v]===want ? null : want);
+}
+function set(v,next){
+  if(state[v]===next) return;
+  pushHistory();
+  state[v]=next;
+  lastChanged=v;
+  save(); update();
+}
+
+/* ── 对方手牌表：按牌值复用节点，只改内容与配色 ── */
+const gcells=new Map();
+function syncGuesses(rows){
+  const wrap=$('guessWrap');
+  if(!rows){
+    gcells.clear();
+    if(!wrap.firstElementChild||!wrap.firstElementChild.classList.contains('empty'))
+      wrap.innerHTML='<div class="empty">牌池已空。</div>';
+    return;
+  }
+  let grid=wrap.firstElementChild;
+  if(!grid||!grid.classList.contains('ggrid')){
+    wrap.innerHTML='<div class="ggrid"></div>';
+    grid=wrap.firstElementChild;
+    gcells.clear();
+  }
+  const live=new Set(rows.map(r=>r.c));
+  gcells.forEach((el,c)=>{ if(!live.has(c)){ el.remove(); gcells.delete(c); } });
+
+  rows.forEach((r,i)=>{
+    let el=gcells.get(r.c);
+    if(!el){
+      el=document.createElement('div');
+      el.className='gcell';
+      el.innerHTML='<s></s><span class="gv">'+r.c+'</span><span class="gt"></span><span class="gb">爆</span>';
+      el.querySelector('.gb').style.display='none';
+      gcells.set(r.c,el);
+    }
+    const bust=r.t>21, exact=r.t===21;
+    el.classList.toggle('bust',bust);
+    el.classList.toggle('exact',exact);
+    el.classList.toggle('safe',!bust&&!exact);
+    el.querySelector('.gt').textContent='→ '+r.t;
+    el.querySelector('.gb').style.display = bust?'':'none';
+    if(grid.children[i]!==el) grid.insertBefore(el, grid.children[i]||null);
+  });
+}
+
+/* ── 汇总渲染 ─────────────────────────── */
+function update(){
+  renderCards();
+
+  const my=getMy(), enemy=getEnemy(), remain=getRemain();
+  const myT=sum(my), enT=sum(enemy), n=remain.length;
+
+  tween($('myTotal'),myT,0);
+  tween($('enemyTotal'),enT,0);
+  $('myCards').textContent=my.length?my.join(' + '):'—';
+  $('enemyCards').textContent=enemy.length?enemy.join(' + '):'—';
+  $('remainBadge').textContent='剩余 '+n+' 张';
+  $('probNote').textContent='剩余 '+n+' 张';
+
+  /* 只在"一定爆牌"时提示 */
+  $('myChip').innerHTML    = myT>21 ? '<span class="chip">已爆牌</span>' : '';
+  $('enemyChip').innerHTML = enT>=21 ? '<span class="chip">已爆牌</span>' : '';
+
+  /* 我方下一抽：不爆 / 21 点 / 爆 */
+  let safe=0,bust=0,exact=0;
+  remain.forEach(c=>{ const t=myT+c; t<=21?safe++:bust++; if(t===21)exact++; });
+  const sp=pct(safe,n), ep=pct(exact,n), bp=pct(bust,n);
+  $('safeBar').style.width=sp+'%';
+  $('exactBar').style.width=ep+'%';
+  $('bustBar').style.width=bp+'%';
+  n ? tween($('safeTxt'),sp,1,'%')  : dash($('safeTxt'));
+  n ? tween($('exactTxt'),ep,1,'%') : dash($('exactTxt'));
+  n ? tween($('bustTxt'),bp,1,'%')  : dash($('bustTxt'));
+
+  /* 对方爆牌概率：固定 10 格刻度，填充从左往右长 */
+  let oBust=0;
+  remain.forEach(c=>{ if(enT+c>21) oBust++; });
+  const op=pct(oBust,n);
+  $('oppFill').style.width=op+'%';
+  $('riskRow').classList.toggle('hot', n>0 && oBust*2>=n);
+  $('oppRiskTxt').textContent = enemy.length ? (n?op.toFixed(1)+'%':'—') : '—';
+  $('oppNote').textContent = enemy.length
+    ? '明牌 '+enT+' 点 + 暗牌 · 剩 '+n+' 张'
+    : '尚未标记对方明牌';
+
+  /* 对方手牌可能大小：每格 = 暗牌取该值时对方的总点数（等概率，故不列概率） */
+  syncGuesses(remain.length
+    ? remain.map(c=>({c,t:enT+c})).sort((a,b)=>a.t-b.t||a.c-b.c)
+    : null);
+
+  $('undoBtn').disabled = history.length===0;
+}
+
+/* ── 撤销 / 重置 / 记忆 ────────────────── */
+function undo(){
+  if(!history.length) return;
+  state=JSON.parse(history.pop());
+  save(); update();
+}
+function reset(){
+  if(CARDS.every(v=>state[v]===null)) return;
+  pushHistory();
+  CARDS.forEach(v=>state[v]=null);
+  save(); update();
+}
+function save(){ try{ localStorage.setItem(KEY,JSON.stringify({state,history:history.slice(-20)})); }catch(e){} }
+function load(){
+  CARDS.forEach(v=>state[v]=null);
+  let restored=false;
+  try{
+    const raw=localStorage.getItem(KEY); if(!raw) return false;
+    const d=JSON.parse(raw);
+    CARDS.forEach(v=>{ const s=d.state&&d.state[v]; state[v]=(s==='my'||s==='enemy')?s:null; });
+    if(Array.isArray(d.history)) history=d.history.filter(h=>typeof h==='string').slice(-20);
+    restored=CARDS.some(v=>state[v]!==null);
+  }catch(e){}
+  return restored;
+}
+
+/* ── 输入方式：触摸屏才显示模式切换 ────── */
+const mqTouch=window.matchMedia('(hover: none) and (pointer: coarse)');
+function applyInputMode(){
+  isTouch=mqTouch.matches;
+  $('modes').hidden=!isTouch;
+  $('cardHint').textContent = isTouch
+    ? '点牌 = 标记为当前模式 · 再点一次取消'
+    : '左键=我方 · 右键=对方 · 中键=取消';
+}
+if(mqTouch.addEventListener) mqTouch.addEventListener('change',applyInputMode);
+else if(mqTouch.addListener) mqTouch.addListener(applyInputMode);
+
+document.querySelectorAll('.mode').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    mode=btn.dataset.mode;
+    document.querySelectorAll('.mode').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));
+  });
+});
+$('undoBtn').addEventListener('click',undo);
+$('resetBtn').addEventListener('click',reset);
+window.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
+});
+
+load();
+applyInputMode();
+update();
+</script>
+</body>
+</html>
